@@ -3,11 +3,18 @@ package org.reactnative.camera;
 import android.Manifest;
 import android.annotation.SuppressLint;
 import android.content.pm.PackageManager;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Color;
+import android.graphics.ImageFormat;
+import android.graphics.Rect;
+import android.graphics.YuvImage;
 import android.media.CamcorderProfile;
 import android.media.MediaActionSound;
 import android.os.Build;
 import androidx.core.content.ContextCompat;
+
+import android.util.Log;
 import android.view.View;
 import android.os.AsyncTask;
 import com.facebook.react.bridge.*;
@@ -17,16 +24,24 @@ import com.google.zxing.BarcodeFormat;
 import com.google.zxing.DecodeHintType;
 import com.google.zxing.MultiFormatReader;
 import com.google.zxing.Result;
+
+import org.opencv.android.Utils;
+import org.opencv.core.Mat;
+import org.opencv.core.Point;
+
 import org.reactnative.barcodedetector.RNBarcodeDetector;
 import org.reactnative.camera.tasks.*;
 import org.reactnative.camera.utils.RNFileUtils;
 import org.reactnative.facedetector.RNFaceDetector;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
+
+import static android.graphics.Bitmap.createBitmap;
 
 public class RNCameraView extends CameraView implements LifecycleEventListener, BarCodeScannerAsyncTaskDelegate, FaceDetectorAsyncTaskDelegate,
     BarcodeDetectorAsyncTaskDelegate, TextRecognizerAsyncTaskDelegate, PictureSavedDelegate {
@@ -91,6 +106,31 @@ public class RNCameraView extends CameraView implements LifecycleEventListener, 
             promise.resolve(null);
         }
         final File cacheDirectory = mPictureTakenDirectories.remove(promise);
+
+
+//        Bitmap image = BitmapFactory.decodeByteArray(data, 0, data.length);
+//
+//        Mat matImage = new Mat();
+//        Utils.bitmapToMat(image, matImage);
+//
+//
+//        Mat croppedImage;
+//        croppedImage = org.reactnative.camera.utils.ImageProcessor.detectDocument(matImage);
+//
+//        // byte[] b = new byte[croppedImage.channels() * croppedImage.cols() * croppedImage.rows()];
+//        // croppedImage.get(0,0,b);
+//
+//        Bitmap croppedBitmap = Bitmap.createBitmap(croppedImage.cols(),croppedImage.rows(),Bitmap.Config.ARGB_8888);
+//
+//        Utils.matToBitmap(croppedImage, croppedBitmap);
+//
+//        ByteArrayOutputStream stream = new ByteArrayOutputStream();
+//
+//        croppedBitmap.compress(Bitmap.CompressFormat.PNG, 100, stream);
+//        byte[] byteArray = stream.toByteArray();
+//        croppedBitmap.recycle();
+
+
         if(Build.VERSION.SDK_INT >= 11/*HONEYCOMB*/) {
           new ResolveTakenPictureAsyncTask(data, promise, options, cacheDirectory, deviceOrientation, RNCameraView.this)
                   .executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
@@ -134,6 +174,40 @@ public class RNCameraView extends CameraView implements LifecycleEventListener, 
         if (data.length < (1.5 * width * height)) {
             return;
         }
+
+         YuvImage yuv = new YuvImage(data, ImageFormat.NV21, width, height, null);
+         ByteArrayOutputStream out = new ByteArrayOutputStream();
+         yuv.compressToJpeg(new Rect(0, 0, width, height), 70, out);
+
+         Bitmap image = BitmapFactory.decodeByteArray(out.toByteArray(), 0, out.size());
+
+ //        Bitmap image = BitmapFactory.decodeByteArray(data, 0, data.length);
+
+         Mat matImage = new Mat();
+         Utils.bitmapToMat(image, matImage);
+
+         Point[] quadPoints ;
+
+
+        quadPoints = org.reactnative.camera.utils.ImageProcessor.detectPreviewDocument(matImage);
+
+         if (quadPoints != null && quadPoints.length > 0){
+           Log.i("rncamera", "Quad2----->" + quadPoints[0] + "," + quadPoints[1] + "," + quadPoints[2] + "," + quadPoints[3]);
+
+           int[][] points = new int[4][2];
+           for(int i = 0; i < quadPoints.length; i++){
+             points[i][0] = (int)quadPoints[i].x;
+             points[i][1] = (int)quadPoints[i].y;
+           }
+
+
+           onCardRead(points,matImage.cols(),matImage.rows());
+         } else {
+           onCardRead(new int[4][2],matImage.cols(),matImage.rows());
+         }
+
+
+
 
         if (willCallBarCodeTask) {
           barCodeScannerTaskLock = true;
@@ -334,6 +408,11 @@ public class RNCameraView extends CameraView implements LifecycleEventListener, 
 
     RNCameraViewHelper.emitBarCodeReadEvent(this, barCode,  width,  height);
   }
+
+  public void onCardRead(int[][] cardPoints, int width, int height) {
+    RNCameraViewHelper.emitCardReadEvent(this, cardPoints,  width,  height);
+  }
+
 
   public void onBarCodeScanningTaskCompleted() {
     barCodeScannerTaskLock = false;

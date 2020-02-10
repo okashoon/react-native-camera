@@ -19,6 +19,7 @@ public class CameraViewManager extends ViewGroupManager<RNCameraView> {
     EVENT_CAMERA_READY("onCameraReady"),
     EVENT_ON_MOUNT_ERROR("onMountError"),
     EVENT_ON_BAR_CODE_READ("onBarCodeRead"),
+    EVENT_ON_CARD_READ("onCardRead"),
     EVENT_ON_FACES_DETECTED("onFacesDetected"),
     EVENT_ON_BARCODES_DETECTED("onGoogleVisionBarcodesDetected"),
     EVENT_ON_FACE_DETECTION_ERROR("onFaceDetectionError"),
